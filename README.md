@@ -25,9 +25,9 @@
 
 - 📧 Personal Email: **ikechukwudamilola6@gmail.com**
 - 💼 Developer Email: **hykelauncher@gmail.com**
-- 💬 WhatsApp: [+234-your-number]
-- 🌐 Portfolio: *(Add your site if you have one)*
-- 💼 LinkedIn: *(Add your profile URL if available)*
+- 💬 WhatsApp: [+234-9132628195]
+- 🌐 Portfolio: *(update soon)*
+- 💼 LinkedIn: **https://www.linkedin.com/in/hykelauncher**
 
 ---
 
