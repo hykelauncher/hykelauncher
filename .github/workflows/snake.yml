@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 0 * * *"  # Runs daily at midnight
   workflow_dispatch:
+  push:
+    branches: [ "master" ]
+
+permissions:
+  contents: write
 
 jobs:
   generate:
@@ -11,7 +16,7 @@ jobs:
     steps:
       - uses: Platane/snk@v3
         with:
-          github_user_name: hykeLauncher
+          github_user_name: ${{ github.repository_owner }}
           outputs: |
             dist/github-contribution-grid-snake.svg
             dist/github-contribution-grid-snake-dark.svg?palette=github-dark
