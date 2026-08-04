@@ -10,6 +10,12 @@ on:
 permissions:
   contents: write
 
+# Shared with the other workflows that commit to master, so they queue instead
+# of racing each other's pushes.
+concurrency:
+  group: profile-assets
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,4 +34,8 @@ jobs:
           git add --all profile-3d-contrib
           git diff --staged --quiet && echo "No changes" && exit 0
           git commit -m "chore: regenerate 3D contribution graph"
-          git push
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin master && git push && exit 0
+            echo "push attempt $i lost a race, retrying"; sleep 5
+          done
+          exit 1
