@@ -85,6 +85,13 @@ problem I ran into myself, usually for a Nigerian or UK market that bigger playe
   <img alt="Contribution activity graph" src="https://github-readme-activity-graph.vercel.app/graph?username=hykelauncher&theme=tokyo-night&hide_border=true&area=true" />
 </p>
 
+<!-- Regenerated nightly by .github/workflows/3d-contrib.yml -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./profile-3d-contrib/profile-night-view.svg" />
+  <source media="(prefers-color-scheme: light)" srcset="./profile-3d-contrib/profile-season-animate.svg" />
+  <img alt="3D contribution graph" src="./profile-3d-contrib/profile-night-view.svg" />
+</picture>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hykelauncher/hykelauncher/output/github-contribution-grid-snake-dark.svg" />
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/hykelauncher/hykelauncher/output/github-contribution-grid-snake.svg" />
