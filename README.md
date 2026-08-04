@@ -76,9 +76,15 @@ problem I ran into myself, usually for a Nigerian or UK market that bigger playe
 
 ### Stats
 
+<!-- Stats + top languages are served from my own Vercel deployment of
+     anuraghazra/github-readme-stats, so no third-party outage can break them. -->
 <p align="center">
-  <img height="165" alt="GitHub stats" src="https://github-readme-stats-sigma-five.vercel.app/api?username=hykelauncher&show_icons=true&hide_border=true&theme=tokyonight&include_all_commits=true&count_private=true" />
+  <img height="165" alt="GitHub stats" src="https://hyke-stats.vercel.app/api?username=hykelauncher&show_icons=true&hide_border=true&theme=tokyonight&include_all_commits=true&count_private=true" />
   <img height="165" alt="Streak" src="https://streak-stats.demolab.com?user=hykelauncher&hide_border=true&theme=tokyonight" />
+</p>
+
+<p align="center">
+  <img height="175" alt="Top languages" src="https://hyke-stats.vercel.app/api/top-langs?username=hykelauncher&layout=compact&hide_border=true&theme=tokyonight&langs_count=8" />
 </p>
 
 <p align="center">
