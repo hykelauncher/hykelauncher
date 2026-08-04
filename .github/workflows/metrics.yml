@@ -1,0 +1,53 @@
+name: Generate Metrics Dashboard
+
+# NOTE: needs a METRICS_TOKEN repo secret (classic PAT, no scopes required).
+# Deliberately has no `push` trigger so it does not fail on every commit before
+# that secret exists — run it from the Actions tab once the secret is added.
+on:
+  schedule:
+    - cron: "0 2 * * *"  # Daily, after the snake and 3D graph
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    steps:
+      # Main dashboard: activity, languages, and an isometric contribution calendar
+      - name: Overview
+        uses: lowlighter/metrics@v3.34
+        with:
+          token: ${{ secrets.METRICS_TOKEN }}
+          user: ${{ github.repository_owner }}
+          filename: metrics.svg
+          template: classic
+          base: header, activity, community, repositories, metadata
+          config_timezone: Africa/Lagos
+          config_display: large
+          plugin_isocalendar: yes
+          plugin_isocalendar_duration: full-year
+          plugin_languages: yes
+          plugin_languages_details: bytes-size, percentage
+          plugin_languages_limit: 8
+          plugin_languages_sections: most-used
+          plugin_lines: yes
+
+      # Secondary card: coding habits and achievement badges
+      - name: Habits and achievements
+        uses: lowlighter/metrics@v3.34
+        with:
+          token: ${{ secrets.METRICS_TOKEN }}
+          user: ${{ github.repository_owner }}
+          filename: metrics.habits.svg
+          base: ""
+          config_timezone: Africa/Lagos
+          plugin_habits: yes
+          plugin_habits_from: 200
+          plugin_habits_days: 14
+          plugin_habits_charts: yes
+          plugin_achievements: yes
+          plugin_achievements_threshold: C
+          plugin_achievements_secrets: yes
+          plugin_achievements_display: compact
