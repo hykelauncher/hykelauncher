@@ -27,6 +27,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           USERNAME: ${{ github.repository_owner }}
 
+      # Additive pass: same night view, plus a snake gliding over it. Writes a
+      # new file, so the original stays exactly as github-profile-3d-contrib
+      # produced it and can still be used on its own.
+      - name: Overlay snake on the night view
+        run: |
+          node scripts/snake-overlay.mjs \
+            profile-3d-contrib/profile-night-view.svg \
+            profile-3d-contrib/profile-night-view-snake.svg
+
       - name: Commit generated SVGs
         run: |
           git config user.name  "github-actions[bot]"

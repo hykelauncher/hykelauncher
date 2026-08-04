@@ -6,10 +6,14 @@
  * isometric tower, and a snake weaves through the grid flattening every tower
  * it passes over.
  *
- * Animation is CSS keyframes, deliberately not SMIL: Chrome does not run SMIL
- * timelines for SVGs referenced by an <img> tag, which is exactly how GitHub
- * embeds README images. CSS animations do run there. Output is committed to
- * the repo, so there is no third-party host that can go down.
+ * Animation is CSS keyframes. (An earlier version used SMIL and appeared frozen
+ * inside an <img>; that turned out to be a stale screenshot raster rather than
+ * a real limitation — SMIL does run there. CSS is kept because one shared
+ * keyframes track phase-shifted by animation-delay is the tidier way to drive
+ * every snake segment off a single definition.)
+ *
+ * Output is committed to the repo, so there is no third-party host that can go
+ * down.
  *
  * Usage: GITHUB_TOKEN=... node scripts/iso-snake.mjs <login>
  */

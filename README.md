@@ -101,9 +101,9 @@ problem I ran into myself, usually for a Nigerian or UK market that bigger playe
 
 <!-- Regenerated nightly by .github/workflows/3d-contrib.yml -->
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./profile-3d-contrib/profile-night-view.svg" />
+  <source media="(prefers-color-scheme: dark)" srcset="./profile-3d-contrib/profile-night-view-snake.svg" />
   <source media="(prefers-color-scheme: light)" srcset="./profile-3d-contrib/profile-season-animate.svg" />
-  <img alt="3D contribution graph" src="./profile-3d-contrib/profile-night-view.svg" />
+  <img alt="3D contribution graph with a snake gliding over it" src="./profile-3d-contrib/profile-night-view-snake.svg" />
 </picture>
 
 <picture>
