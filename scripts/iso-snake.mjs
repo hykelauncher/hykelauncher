@@ -42,7 +42,8 @@ const PAD_X = 20;
 const PAD_TOP = 44; // headroom for the tallest tower
 const PAD_BOTTOM = 26; // room for the caption
 const TOWER_H = [0, 7, 14, 22, 32]; // pixel height per contribution level
-const DURATION = 30; // seconds per full loop
+const STEP = 0.08; // seconds per cell
+const LOOP_MAX = 42; // …but never a loop longer than this
 const SNAKE_LEN = 6;
 
 const THEMES = {
@@ -134,22 +135,88 @@ function toLevels(calendar) {
 }
 
 /**
- * A closed circuit over the whole grid: serpentine down the columns, then back
- * along the bottom row and up the first column to where it started. It has to
- * close, because each snake segment is the same animation phase-shifted by a
- * negative begin — an open path would teleport on loop.
+ * The snake plays the game rather than sweeping the grid. From wherever the
+ * head is it takes the shortest way to the nearest tower still standing,
+ * replans after every meal, and never steps into its own body — so the grid
+ * empties in long runs and sudden corners instead of a metronome down the
+ * weeks. Towers it merely crosses on the way are eaten too.
+ *
+ * The route still has to close, because each snake segment is the same
+ * animation phase-shifted by a delay — an open path would teleport on loop.
  */
-function buildPath(cols, rows) {
-  const path = [];
-  for (let c = 0; c < cols; c++) {
-    if (c % 2 === 0) for (let r = 0; r < rows; r++) path.push([c, r]);
-    else for (let r = rows - 1; r >= 0; r--) path.push([c, r]);
+function buildPath(grid, cols, rows) {
+  const key = (c, r) => `${c},${r}`;
+  const real = (c, r) => c >= 0 && c < cols && r >= 0 && r < rows && grid[c][r] !== null;
+  const around = (k) => {
+    const [c, r] = k.split(",").map(Number);
+    return [
+      [c + 1, r],
+      [c - 1, r],
+      [c, r + 1],
+      [c, r - 1],
+    ]
+      .filter(([a, b]) => real(a, b))
+      .map(([a, b]) => key(a, b));
+  };
+
+  // Breadth-first to the closest cell that `wanted` accepts, never entering a
+  // `blocked` one. Returns the cells to walk through, the start excluded.
+  const routeTo = (from, wanted, blocked) => {
+    const cameFrom = new Map([[from, null]]);
+    const queue = [from];
+    for (let q = 0; q < queue.length; q++) {
+      const here = queue[q];
+      if (here !== from && wanted(here)) {
+        const leg = [];
+        for (let k = here; k !== from; k = cameFrom.get(k)) leg.unshift(k);
+        return leg;
+      }
+      for (const next of around(here)) {
+        if (cameFrom.has(next) || blocked.has(next)) continue;
+        cameFrom.set(next, here);
+        queue.push(next);
+      }
+    }
+    return null;
+  };
+
+  // The oldest real day on the calendar — the first week is usually a stub.
+  let home = null;
+  for (let c = 0; c < cols && !home; c++) {
+    for (let r = 0; r < rows && !home; r++) if (real(c, r)) home = key(c, r);
   }
-  const [lastC, lastR] = path[path.length - 1];
-  // Walk home along the last row reached, then up column 0 to (0,0).
-  for (let c = lastC - 1; c >= 0; c--) path.push([c, lastR]);
-  for (let r = lastR - 1; r >= 1; r--) path.push([0, r]);
-  return path;
+
+  const standing = new Set();
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) if (grid[c][r] > 0) standing.add(key(c, r));
+  }
+
+  const walk = [home];
+  standing.delete(home); // whatever it starts on, it starts by eating
+
+  // The body is the last few cells the head came through. It has usually moved
+  // on by the time the head could reach them again, so keeping a whole leg
+  // clear of them is pessimistic — hence the second, unblocked attempt.
+  const body = () => new Set(walk.slice(-(SNAKE_LEN - 1)));
+
+  while (standing.size) {
+    const from = walk[walk.length - 1];
+    const hunt = (k) => standing.has(k);
+    const leg = routeTo(from, hunt, body()) ?? routeTo(from, hunt, new Set());
+    if (!leg) break; // the calendar is one piece, so this should not happen
+    for (const k of leg) {
+      walk.push(k);
+      standing.delete(k);
+    }
+  }
+  if (standing.size) throw new Error(`${standing.size} towers unreachable`);
+
+  for (const k of routeTo(walk[walk.length - 1], (k) => k === home, body()) ?? []) {
+    walk.push(k);
+  }
+  if (walk[walk.length - 1] === home) walk.pop(); // the 100% stop lands there
+
+  return walk.map((k) => k.split(",").map(Number));
 }
 
 // ------------------------------------------------------------------ render --
@@ -158,8 +225,9 @@ function render(grid, theme, totalContributions, login) {
   const cols = grid.length;
   const rows = 7;
 
-  const path = buildPath(cols, rows);
+  const path = buildPath(grid, cols, rows);
   const steps = path.length;
+  const duration = Math.min(LOOP_MAX, Math.max(6, Math.round(steps * STEP)));
   // Step index at which the snake head reaches each cell (first visit only).
   const eatAt = new Map();
   path.forEach(([c, r], i) => {
@@ -206,12 +274,14 @@ function render(grid, theme, totalContributions, login) {
         `<path d="M${FW},${-h} ${FW + FS},${FD - h} ${FW + FS},${FD} ${FW},0Z" fill="${side}"/>` +
         `<path d="M0,${-h} ${FW},${-h} ${FW + FS},${FD - h} ${FS},${FD - h}Z" fill="${top}"/>`;
 
-      // Squash the tower flat as the head passes over it. transform-box:
-      // fill-box puts the origin on the tower's own bounding box, so it
-      // collapses down onto its slab rather than toward the SVG origin.
+      // Squash the tower flat, finishing on the step the head lands rather than
+      // starting there: the snake rides the ground slabs, so a tower still
+      // standing when it arrives would be wearing it. transform-box: fill-box
+      // puts the origin on the tower's own bounding box, so it collapses down
+      // onto its slab rather than toward the SVG origin.
       const i = eatAt.get(`${c},${r}`) ?? 0;
-      const p = ((i / steps) * 100).toFixed(3);
-      const pe = ((Math.min(steps, i + 2.5) / steps) * 100).toFixed(3);
+      const p = ((Math.max(0, i - 1.2) / steps) * 100).toFixed(3);
+      const pe = ((Math.max(i, 0.4) / steps) * 100).toFixed(3);
       const id = `t${towerKeyframes.length}`;
       towerKeyframes.push(
         `@keyframes ${id}{0%,${p}%{transform:scaleY(1)}${pe}%,100%{transform:scaleY(0)}}`,
@@ -224,17 +294,30 @@ function render(grid, theme, totalContributions, login) {
   // Snake — every segment shares one keyframes track and is phase-shifted by a
   // positive animation-delay so it trails the head. A shared track only works
   // because the path is a closed circuit; an open path would teleport on loop.
-  const stops = path.map(([c, r], k) => {
+  //
+  // Time runs at one cell per stop, so a cell sitting exactly halfway between
+  // its neighbours is what linear interpolation would have put there anyway.
+  // Dropping those leaves only the corners, which is most of the file back: a
+  // long run across cleared grid costs two stops instead of fifty.
+  const points = path.map(([c, r]) => {
     const { x, y } = centre(c, r);
-    const pct = ((k / steps) * 100).toFixed(4);
-    return `${pct}%{transform:translate(${(ox + x).toFixed(1)}px,${(oy + y - 3).toFixed(1)}px)}`;
+    return { x: ox + x, y: oy + y - 3 };
   });
-  const first = centre(path[0][0], path[0][1]);
-  stops.push(
-    `100%{transform:translate(${(ox + first.x).toFixed(1)}px,${(oy + first.y - 3).toFixed(1)}px)}`,
-  );
+  points.push(points[0]); // close the loop where it opened
+
+  const straight = (a, b, c) =>
+    Math.abs(a.x + c.x - 2 * b.x) < 0.05 && Math.abs(a.y + c.y - 2 * b.y) < 0.05;
+
+  const stops = [];
+  for (let k = 0; k <= steps; k++) {
+    if (k > 0 && k < steps && straight(points[k - 1], points[k], points[k + 1])) continue;
+    const p = points[k];
+    stops.push(
+      `${((k / steps) * 100).toFixed(4)}%{transform:translate(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px)}`,
+    );
+  }
   const snakeKeyframes = `@keyframes snk{${stops.join("")}}`;
-  const stepDur = DURATION / steps;
+  const stepDur = duration / steps;
 
   const snake = [];
   for (let s = SNAKE_LEN - 1; s >= 0; s--) {
@@ -251,8 +334,8 @@ function render(grid, theme, totalContributions, login) {
   const style =
     `<style>` +
     `.t{transform-box:fill-box;transform-origin:50% 100%;` +
-    `animation-duration:${DURATION}s;animation-timing-function:linear;animation-iteration-count:infinite}` +
-    `.s{animation:snk ${DURATION}s linear infinite both}` +
+    `animation-duration:${duration}s;animation-timing-function:linear;animation-iteration-count:infinite}` +
+    `.s{animation:snk ${duration}s linear infinite both}` +
     towerKeyframes.map((k, i) => `.t${i}{animation-name:t${i}}`).join("") +
     snakeKeyframes +
     towerKeyframes.join("") +

@@ -10,6 +10,11 @@
  * towers, so it shares the projection exactly and reads as part of the scene
  * rather than a flat sticker on top of it.
  *
+ * Route: it plays the game rather than sweeping. From wherever the head is it
+ * takes the shortest way to the nearest tower it has not eaten yet, one cell at
+ * a time in the four lattice directions, and never into its own body — so the
+ * board empties in the long runs and sudden corners of a snake game.
+ *
  * Eating: a tower cannot simply be hidden, because in this format the raised
  * top face IS the tower — there is no separate ground tile underneath. So each
  * tower gets a static level-0 tile inserted behind it, then collapses onto that
@@ -34,7 +39,8 @@ if (!input || !output) {
   process.exit(1);
 }
 
-const DURATION = 34; // seconds per loop
+const STEP = 0.08; // seconds per cell
+const LOOP_MAX = 42; // …but never a loop longer than this
 const SNAKE_LEN = 7;
 const ROWS = 7;
 const ISO = 0.57735; // tan(30°) — the file's own right-face offset ratio
@@ -104,27 +110,84 @@ const byCell = new Map();
 cells.forEach((c, i) => byCell.set(`${wd(i).w},${wd(i).d}`, i));
 const maxW = wd(cells.length - 1).w;
 
-// ------------------------------------------------------------- build circuit --
-// Serpentine through the weeks, then home along one row and up the first
-// column. It must close: every segment replays one shared keyframes track at a
-// different phase, so an open path would teleport on each loop.
-const path = [];
-for (let w = 0; w <= maxW; w++) {
-  const days = [];
-  for (let d = 0; d < ROWS; d++) if (byCell.has(`${w},${d}`)) days.push(d);
-  if (w % 2 === 1) days.reverse();
-  for (const d of days) path.push(byCell.get(`${w},${d}`));
+// --------------------------------------------------------------- plot a route --
+// The snake hunts: shortest way to the nearest tower still standing, replanned
+// after every meal. Anything it crosses on the way is eaten too, so a leg often
+// ends up feeding it several towers.
+//
+// The route has to close. Every segment replays one shared keyframes track at a
+// different phase, so if the last cell were not next to the first the whole
+// snake would streak across the board once per loop.
+const key = (w, d) => `${w},${d}`;
+const STEPS_4 = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+const around = (k) => {
+  const [w, d] = k.split(",").map(Number);
+  return STEPS_4.map(([dw, dd]) => key(w + dw, d + dd)).filter((n) => byCell.has(n));
+};
+
+// Breadth-first to the closest cell that `wanted` accepts, never entering a
+// `blocked` one. Returns the cells to walk through, the starting cell excluded.
+const routeTo = (from, wanted, blocked) => {
+  const cameFrom = new Map([[from, null]]);
+  const queue = [from];
+  for (let q = 0; q < queue.length; q++) {
+    const here = queue[q];
+    if (here !== from && wanted(here)) {
+      const leg = [];
+      for (let k = here; k !== from; k = cameFrom.get(k)) leg.unshift(k);
+      return leg;
+    }
+    for (const next of around(here)) {
+      if (cameFrom.has(next) || blocked.has(next)) continue;
+      cameFrom.set(next, here);
+      queue.push(next);
+    }
+  }
+  return null;
+};
+
+const home = key(0, 0); // the oldest corner of the calendar
+const standing = new Set();
+cells.forEach((c, i) => {
+  if (c.tower) standing.add(key(wd(i).w, wd(i).d));
+});
+
+const walk = [home];
+standing.delete(home); // whatever it starts on, it starts by eating
+
+// The body is the last few cells the head came through. It has usually moved on
+// by the time the head could reach them again, so keeping a whole leg clear of
+// them is pessimistic — hence the second, unblocked attempt.
+const body = () => new Set(walk.slice(-(SNAKE_LEN - 1)));
+
+let legs = 0;
+while (standing.size) {
+  const from = walk[walk.length - 1];
+  const hunt = (k) => standing.has(k);
+  const leg = routeTo(from, hunt, body()) ?? routeTo(from, hunt, new Set());
+  if (!leg) break; // lattice is one piece, so this means something is very wrong
+  for (const k of leg) {
+    walk.push(k);
+    standing.delete(k);
+  }
+  legs++;
 }
-const lastRow = wd(path[path.length - 1]).d;
-for (let w = maxW - 1; w >= 0; w--) {
-  const i = byCell.get(`${w},${lastRow}`);
-  if (i !== undefined) path.push(i);
+
+for (const k of routeTo(walk[walk.length - 1], (k) => k === home, body()) ?? []) {
+  walk.push(k);
 }
-for (let d = lastRow - 1; d >= 1; d--) {
-  const i = byCell.get(`0,${d}`);
-  if (i !== undefined) path.push(i);
-}
+if (walk[walk.length - 1] === home) walk.pop(); // the 100% stop lands there
+
+const path = walk.map((k) => byCell.get(k));
 const steps = path.length;
+if (standing.size) {
+  throw new Error(`${standing.size} towers unreachable — lattice is not one piece?`);
+}
 
 const eatAt = new Map();
 path.forEach((idx, k) => {
@@ -144,10 +207,13 @@ const rewritten = svg.replace(CELL_RE, (whole, mx, my, body) => {
   const c = cells[seen++];
   if (!c.tower) return whole;
 
+  // Squashed flat by the time the head lands on it, not after: the snake runs
+  // along the ground plane, so a tower still standing there would be wearing it.
   const k = eatKeyframes.length;
   const g = c.ground.toFixed(2);
-  const start = ((eatAt.get(seen - 1) ?? 0) / steps) * 100;
-  const end = (Math.min(steps, (eatAt.get(seen - 1) ?? 0) + 2.5) / steps) * 100;
+  const arrival = eatAt.get(seen - 1) ?? 0;
+  const start = (Math.max(0, arrival - 1.2) / steps) * 100;
+  const end = (Math.max(arrival, 0.4) / steps) * 100;
   eatKeyframes.push(
     `@keyframes eat${k}{0%,${start.toFixed(3)}%{transform:translateY(${g}px) scaleY(1) translateY(-${g}px)}` +
       `${end.toFixed(3)}%,100%{transform:translateY(${g}px) scaleY(0) translateY(-${g}px)}}`,
@@ -172,28 +238,45 @@ const cube = (s, shades) => {
   );
 };
 
-// Ride the top face of whatever is at that cell, sitting on the surface rather
-// than sunk into it.
-const perch = (idx, s) => {
-  const c = cells[idx];
+// The snake travels the ground plane, never the tower tops. Climbing looked
+// like a staircase — the head up on a tower with the middle of the body strung
+// out on an invisible ramp behind it — and once the route doubles back, a stale
+// tower height leaves the snake walking on air over ground it already cleared.
+// Towers get out of its way instead: each one finishes collapsing on the step
+// the head arrives (see the eat keyframes above), so the lane is always flat.
+const perch = (k, s) => {
+  const c = cells[path[k % steps]];
   return {
     x: c.x + CELL - s,
-    y: c.y - s * 0.62 * 1.15,
+    y: c.ground - s * 0.62 * 1.15,
   };
 };
 
 // One shared track sized for the head. A tapered segment's perch differs from
 // the head's by a constant, so each cube carries that as a static inner
-// translate instead of duplicating a 420-stop track per segment.
+// translate instead of duplicating the whole track per segment.
+const DURATION = Math.min(LOOP_MAX, Math.max(6, Math.round(steps * STEP)));
 const stepDur = DURATION / steps;
-const stops = path.map((idx, k) => {
-  const p = perch(idx, HEAD_TOP);
-  return `${((k / steps) * 100).toFixed(4)}%{transform:translate(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px)}`;
-});
-const home = perch(path[0], HEAD_TOP);
-stops.push(
-  `100%{transform:translate(${home.x.toFixed(1)}px,${home.y.toFixed(1)}px)}`,
-);
+
+// Time runs at one cell per stop, so a cell sitting exactly halfway between its
+// neighbours is what linear interpolation would have put there anyway. Dropping
+// those leaves only the corners and the climbs, which is most of the file back:
+// the long runs across empty board cost two stops instead of fifty.
+const points = [];
+for (let k = 0; k <= steps; k++) points.push(perch(k, HEAD_TOP));
+points[steps] = points[0]; // close the loop where it opened
+
+const straight = (a, b, c) =>
+  Math.abs(a.x + c.x - 2 * b.x) < 0.05 && Math.abs(a.y + c.y - 2 * b.y) < 0.05;
+
+const stops = [];
+for (let k = 0; k <= steps; k++) {
+  if (k > 0 && k < steps && straight(points[k - 1], points[k], points[k + 1])) continue;
+  const p = points[k];
+  stops.push(
+    `${((k / steps) * 100).toFixed(4)}%{transform:translate(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px)}`,
+  );
+}
 eatKeyframes.push(`@keyframes snk{${stops.join("")}}`);
 
 const segments = [];
@@ -224,6 +307,6 @@ writeFileSync(output, rewritten.slice(0, idx) + overlay + rewritten.slice(idx));
 
 const towers = cells.filter((c) => c.tower).length;
 console.log(
-  `${output}  ${cells.length} cells, ${towers} towers eaten, ` +
-    `${steps}-step circuit, ${SNAKE_LEN} cubes`,
+  `${output}  ${cells.length} cells, ${towers} towers eaten over ${legs} hunts, ` +
+    `${steps}-step route in ${DURATION}s, ${stops.length} stops, ${SNAKE_LEN} cubes`,
 );
