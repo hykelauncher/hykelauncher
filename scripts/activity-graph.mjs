@@ -1,6 +1,11 @@
 /**
- * activity-graph — the last few weeks of contributions drawn as a cardiac
- * monitor trace, beating on a loop.
+ * activity-graph — a year of contributions, week by week, drawn as a cardiac
+ * monitor trace beating on a loop.
+ *
+ * Weeks rather than days on purpose. Six weeks of daily counts came out as a
+ * flatline with a single 28 spike in it, which is both unreadable and the
+ * wrong story; a year of weekly totals has a rhythm to it, and every week of
+ * the year is in the picture.
  *
  * This replaces github-readme-activity-graph.vercel.app. That service renders
  * on its own host, so its output could not be animated from here — and a free
@@ -34,7 +39,6 @@ if (!TOKEN) {
 }
 
 // ---------------------------------------------------------------- geometry --
-const DAYS = 42; // six weeks: enough spikes to have a rhythm, still legible
 const W = 900;
 const H = 260;
 const PAD = { l: 44, r: 22, t: 56, b: 34 };
@@ -96,29 +100,32 @@ async function fetchCalendar(login) {
   return json.data.user.contributionsCollection.contributionCalendar;
 }
 
-/** The last DAYS days, oldest first. */
-function recentDays(calendar) {
-  const all = calendar.weeks.flatMap((w) => w.contributionDays);
-  return all.slice(-DAYS);
+/** One point per week of the last year, oldest first. */
+function weekly(calendar) {
+  return calendar.weeks
+    .filter((w) => w.contributionDays.length)
+    .map((w) => ({
+      date: new Date(w.contributionDays[0].date),
+      count: w.contributionDays.reduce((n, d) => n + d.contributionCount, 0),
+    }));
 }
 
 // ------------------------------------------------------------------ render --
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
-function render(days, theme, login) {
+function render(weeks, theme, login) {
   const t = THEMES[theme];
-  const peak = Math.max(1, ...days.map((d) => d.contributionCount));
-  const total = days.reduce((n, d) => n + d.contributionCount, 0);
-  const active = days.filter((d) => d.contributionCount > 0).length;
+  const peak = Math.max(1, ...weeks.map((w) => w.count));
+  const total = weeks.reduce((n, w) => n + w.count, 0);
 
-  const x = (i) => PAD.l + (i * PLOT_W) / (days.length - 1);
+  const x = (i) => PAD.l + (i * PLOT_W) / (weeks.length - 1);
   const y = (c) => PAD.t + PLOT_H - (c / peak) * PLOT_H;
-  const pts = days.map((d, i) => ({
+  const pts = weeks.map((w, i) => ({
     x: x(i),
-    y: y(d.contributionCount),
-    count: d.contributionCount,
-    date: new Date(d.date),
+    y: y(w.count),
+    count: w.count,
+    date: w.date,
   }));
 
   // Straight segments, not a spline: a monitor trace is sharp, and a spline
@@ -141,37 +148,28 @@ function render(days, theme, login) {
       `<line x1="${PAD.l}" y1="${gy}" x2="${W - PAD.r}" y2="${gy}" stroke="${t.grid}" stroke-width="1"/>`,
     );
   }
-  for (let i = 0; i < days.length; i += 7) {
-    grid.push(
-      `<line x1="${x(i).toFixed(1)}" y1="${PAD.t}" x2="${x(i).toFixed(1)}" y2="${PAD.t + PLOT_H}" stroke="${t.grid}" stroke-width="1"/>`,
-    );
-  }
-
+  // Ticks where the month turns over, so the grid lines and the labels below
+  // them agree and a reader can find "last March" without counting weeks.
   const labels = [];
-  for (let i = 0; i < days.length; i += 7) {
-    const d = pts[i].date;
-    labels.push(
-      `<text x="${x(i).toFixed(1)}" y="${H - 12}" fill="${t.muted}" font-size="11" text-anchor="middle">${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}</text>`,
+  pts.forEach((p, i) => {
+    if (i && p.date.getUTCMonth() === pts[i - 1].date.getUTCMonth()) return;
+    grid.push(
+      `<line x1="${p.x.toFixed(1)}" y1="${PAD.t}" x2="${p.x.toFixed(1)}" y2="${PAD.t + PLOT_H}" stroke="${t.grid}" stroke-width="1"/>`,
     );
-  }
-  // The last tick can land up to six days short of today. Say where the trace
-  // actually ends — how recent this is happens to be the point.
-  const last = pts[pts.length - 1];
-  if ((days.length - 1) % 7 >= 3) {
     labels.push(
-      `<text x="${(W - PAD.r).toFixed(1)}" y="${H - 12}" fill="${t.muted}" font-size="11" text-anchor="end">${MONTHS[last.date.getUTCMonth()]} ${last.date.getUTCDate()}</text>`,
+      `<text x="${p.x.toFixed(1)}" y="${H - 12}" fill="${t.muted}" font-size="11" text-anchor="middle">${MONTHS[p.date.getUTCMonth()]}</text>`,
     );
-  }
+  });
   labels.push(
     `<text x="${PAD.l - 8}" y="${(PAD.t + 4).toFixed(1)}" fill="${t.muted}" font-size="11" text-anchor="end">${peak}</text>`,
     `<text x="${PAD.l - 8}" y="${(PAD.t + PLOT_H + 4).toFixed(1)}" fill="${t.muted}" font-size="11" text-anchor="end">0</text>`,
   );
 
-  // The days worth calling out: the busiest few, each getting a ring as the
+  // The weeks worth calling out: the busiest few, each getting a ring as the
   // head passes. Every spike blipping at once would read as noise.
   const marks = pts
     .map((p, i) => ({ ...p, i }))
-    .filter((p) => p.count >= Math.max(2, peak * 0.5))
+    .filter((p) => p.count >= Math.max(2, peak * 0.4))
     .sort((a, b) => b.count - a.count)
     .slice(0, 8);
 
@@ -230,12 +228,12 @@ function render(days, theme, login) {
   const header =
     `<text x="${PAD.l}" y="30" fill="${t.title}" font-size="17" font-weight="600">Contribution activity</text>` +
     `<text x="${W - PAD.r}" y="30" fill="${t.text}" font-size="13" text-anchor="end">` +
-    `${total} contributions · ${active}/${days.length} days active · peak ${peak}</text>`;
+    `${total} contributions in the last year · best week ${peak}</text>`;
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"` +
     ` font-family="Segoe UI,Ubuntu,DejaVu Sans,sans-serif" role="img"` +
-    ` aria-label="Contribution activity for ${esc(login)}: ${total} contributions over the last ${days.length} days, busiest day ${peak}">` +
+    ` aria-label="Contribution activity for ${esc(login)}: ${total} contributions over the last ${weeks.length} weeks, busiest week ${peak}">` +
     style +
     defs +
     `<rect width="${W}" height="${H}" rx="10" fill="${t.bg}"/>` +
@@ -260,11 +258,11 @@ function render(days, theme, login) {
 
 // -------------------------------------------------------------------- main --
 const calendar = await fetchCalendar(LOGIN);
-const days = recentDays(calendar);
+const weeks = weekly(calendar);
 
 mkdirSync("activity", { recursive: true });
 for (const theme of ["dark", "light"]) {
-  const svg = render(days, theme, LOGIN);
+  const svg = render(weeks, theme, LOGIN);
   const file = `activity/activity-${theme}.svg`;
   writeFileSync(file, svg);
   console.log(`${file}  ${(svg.length / 1024).toFixed(1)} KB`);
