@@ -87,8 +87,13 @@ problem I ran into myself, usually for a Nigerian or UK market that bigger playe
   <img height="175" alt="Top languages" src="https://hyke-stats.vercel.app/api/top-langs?username=hykelauncher&layout=compact&hide_border=true&theme=tokyonight&langs_count=8" />
 </p>
 
+<!-- Regenerated nightly by .github/workflows/activity-graph.yml -->
 <p align="center">
-  <img alt="Contribution activity graph" src="https://github-readme-activity-graph.vercel.app/graph?username=hykelauncher&theme=tokyo-night&hide_border=true&area=true" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./activity/activity-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="./activity/activity-light.svg" />
+    <img alt="Contribution activity over the last six weeks, drawn as a heartbeat trace" src="./activity/activity-dark.svg" />
+  </picture>
 </p>
 
 <!-- Regenerated nightly by .github/workflows/3d-contrib.yml -->
